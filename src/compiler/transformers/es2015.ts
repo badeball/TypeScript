@@ -686,46 +686,10 @@ namespace ts {
             //      class C { }
             //
             // [output]
-            //      var C = (function () {
-            //          function C() {
-            //          }
-            //          return C;
-            //      }());
+            //      function C() {
+            //      }
 
-            const variable = createVariableDeclaration(
-                getLocalName(node, /*allowComments*/ true),
-                /*type*/ undefined,
-                transformClassLikeDeclarationToExpression(node)
-            );
-
-            setOriginalNode(variable, node);
-
-            const statements: Statement[] = [];
-            const statement = createVariableStatement(/*modifiers*/ undefined, createVariableDeclarationList([variable]));
-
-            setOriginalNode(statement, node);
-            setTextRange(statement, node);
-            startOnNewLine(statement);
-            statements.push(statement);
-
-            // Add an `export default` statement for default exports (for `--target es5 --module es6`)
-            if (hasModifier(node, ModifierFlags.Export)) {
-                const exportStatement = hasModifier(node, ModifierFlags.Default)
-                    ? createExportDefault(getLocalName(node))
-                    : createExternalModuleExport(getLocalName(node));
-
-                setOriginalNode(exportStatement, statement);
-                statements.push(exportStatement);
-            }
-
-            const emitFlags = getEmitFlags(node);
-            if ((emitFlags & EmitFlags.HasEndOfDeclarationMarker) === 0) {
-                // Add a DeclarationMarker as a marker for the end of the declaration
-                statements.push(createEndOfDeclarationMarker(node));
-                setEmitFlags(statement, emitFlags | EmitFlags.HasEndOfDeclarationMarker);
-            }
-
-            return singleOrMany(statements);
+            return transformClassDeclarationToFunction(node);
         }
 
         /**
@@ -745,6 +709,22 @@ namespace ts {
             //      }())
 
             return transformClassLikeDeclarationToExpression(node);
+        }
+
+        /**
+         * Transforms a ClassDeclaration into statements.
+         *
+         * @param node A ClassDeclaration node.
+         */
+        function transformClassDeclarationToFunction(node: ClassDeclaration): Statement[] {
+            const extendsClauseElement = getClassExtendsHeritageElement(node);
+            const statements: Statement[] = [];
+            startLexicalEnvironment();
+            addExtendsHelperIfNeeded(statements, node, extendsClauseElement);
+            addConstructor(statements, node, extendsClauseElement);
+            addClassMembers(statements, node);
+            addStatementsAfterPrologue(statements, endLexicalEnvironment());
+            return statements;
         }
 
         /**
